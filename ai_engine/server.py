@@ -3,11 +3,17 @@ import torch
 import logging
 import re
 import platform
+import subprocess
+import threading
+import sys
+import requests
 from flask import Flask, request, jsonify, send_from_directory
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from flask_socketio import SocketIO, emit
 
 # --- Configuration ---
 app = Flask(__name__, static_folder='../frontend')
+socketio = SocketIO(app, cors_allowed_origins="*")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(BASE_DIR, "ai_engine", "models", "ret_brain")
 
@@ -77,6 +83,59 @@ def chat():
     except Exception as e:
         return jsonify({"response": f"Error: {str(e)}", "status": "error"})
 
+@app.route('/api/ingest', methods=['POST'])
+def ingest_code():
+    """Download code from URL and save to data/raw"""
+    data = request.json
+    url = data.get('url')
+    if not url: return jsonify({"status": "error", "message": "No URL provided"})
+    
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            filename = url.split('/')[-1] or f"downloaded_{len(url)}.py"
+            if not filename.endswith(('.py', '.js', '.txt', '.md')): filename += ".txt"
+            
+            # Save to ai_engine/data/raw
+            save_path = os.path.join(BASE_DIR, "ai_engine", "data", "raw", filename)
+            if not os.path.exists(os.path.dirname(save_path)):
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write(response.text)
+            return jsonify({"status": "success", "message": f"Downloaded {filename}"})
+        else:
+            return jsonify({"status": "error", "message": f"Failed: {response.status_code}"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@socketio.on('start_training')
+def handle_training():
+    """Runs train.py in a subprocess and streams output via SocketIO"""
+    def run_train_process():
+        # Locate train.py
+        train_script = os.path.join(BASE_DIR, "ai_engine", "train.py")
+        if not os.path.exists(train_script):
+            train_script = os.path.join(BASE_DIR, "train.py") # Fallback
+
+        process = subprocess.Popen(
+            [sys.executable, train_script], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT, 
+            text=True,
+            bufsize=1
+        )
+        
+        for line in process.stdout:
+            socketio.emit('training_log', {'log': line.strip()})
+        
+        process.wait()
+        socketio.emit('training_complete', {'status': 'done'})
+
+    thread = threading.Thread(target=run_train_process)
+    thread.start()
+    emit('training_log', {'log': "--- Initializing Training Subprocess ---"})
+
 @app.route('/api/heal', methods=['POST'])
 def self_heal():
     """AI Self-Healing: Scans project files and simulates fixes."""
@@ -117,6 +176,36 @@ def semantic_search():
                             results.append(file)
                 except: pass
     return jsonify({"results": results[:10]})
+
+@app.route('/api/files', methods=['GET'])
+def list_files():
+    """List all project files for the File Manager"""
+    files_list = []
+    # Scan specific directories
+    search_dirs = ['frontend', 'backend', 'ai_engine']
+    for d in search_dirs:
+        path = os.path.join(BASE_DIR, d)
+        if os.path.exists(path):
+            for root, dirs, files in os.walk(path):
+                if 'node_modules' in dirs: dirs.remove('node_modules')
+                if '__pycache__' in dirs: dirs.remove('__pycache__')
+                for file in files:
+                    rel_path = os.path.relpath(os.path.join(root, file), BASE_DIR)
+                    files_list.append(rel_path)
+    return jsonify({"files": files_list})
+
+@app.route('/api/files/content', methods=['POST'])
+def file_content():
+    """Read or Write file content"""
+    data = request.json
+    path = os.path.join(BASE_DIR, data.get('path'))
+    if data.get('action') == 'save':
+        with open(path, 'w', encoding='utf-8') as f: f.write(data.get('content'))
+        return jsonify({"status": "saved"})
+    else:
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f: return jsonify({"content": f.read()})
+        return jsonify({"error": "File not found"})
 
 @app.route('/api/performance', methods=['GET'])
 def system_performance():
