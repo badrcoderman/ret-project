@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-links">
+            <a href="index.html" class="nav-btn">الرئيسية</a>
+        </div>
+        <select id="langSelect" onchange="changeLanguage(this.value)" class="lang-select">
+            <option value="ar">العربية</option>
+            <option value="en">English</option>
+        </select>
+    </nav>
+
+    <div class="glass-card">
+        <h1 id="loginTitle">تسجيل الدخول</h1>
+        <form action="/submit" method="post">
+            <label for="username" id="lblUser">اسم المستخدم</label>
+            <input type="text" id="username" name="username" required placeholder="...">
+            
+            <label for="password" id="lblPass">كلمة المرور</label>
+            <input type="password" id="password" name="password" required placeholder="••••••">
+            
+            <button type="submit" id="btnSubmit">دخول</button>   
+            
+            <p id="footerText" style="margin-top: 20px;">جديد هنا؟ </p>
+            <a href="/signup.html" id="footerLink" style="display:block; text-align:center;">انضم إلينا</a>
+        </form>
+    </div>
+
+    <script src="lang.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

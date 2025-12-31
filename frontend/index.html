@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الصفحة الرئيسية</title>
+    <meta name="description" content="الصفحة الرئيسية للموقع">
+    <meta name="keywords" content="الصفحة الرئيسية, موقع, تسجيل الدخول, حساب, انشاء حساب">
+    <!-- Security: Content Security Policy to prevent XSS -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <link rel="stylesheet" href="style.css">
+
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-links">
+            <a href="index.html" class="nav-btn active" id="navHome">الصفحة الرئيسية</a>
+            <a href="signup.html" class="nav-btn" id="navSignup">إنشاء حساب</a>
+            <a href="login.html" class="nav-btn" id="navLogin">دخول</a>
+            <a href="contact.html" class="nav-btn" id="navContact">اتصل بنا</a>
+        </div>
+        <select id="langSelect" onchange="changeLanguage(this.value)" class="lang-select">
+            <option value="ar">العربية</option>
+            <option value="en">English</option>
+        </select>
+    </nav>
+
+    <div class="glass-card wide">
+        <h1 id="welcomeTitle">مرحباً بك في المستقبل</h1>
+        <p id="welcomeText">منصتك المتطورة لرفع ومشاركة الملفات بأمان وسرعة.</p>
+        
+        <div class="upload-area">
+            <form id="uploadForm">
+                <div class="upload-drop-zone">
+                    <span class="file-icon">☁️</span>
+                    <label for="fileToUpload" class="upload-label" id="dropText" style="cursor:pointer;">اسحب الملفات هنا</label>
+                    <!-- Security: Restrict file types to prevent executable uploads -->
+                    <input type="file" name="fileToUpload" id="fileToUpload" onchange="updateFileName()" accept="image/*,.pdf,.doc,.docx,.txt">
+                </div>
+                <div id="file-name-display" style="color: var(--primary-color); margin-top:10px;"></div>
+                <div id="progressContainer" class="progress-container">
+                    <div id="progressBar" class="progress-bar"></div>
+                </div>
+                <button type="submit" id="btnUpload" style="position: relative; z-index: 10;">رفع الملف الآن</button>
+            </form>
+        </div>
+        <div id="message" class="message-box"></div>
+
+        <div style="margin-top: 40px;">
+            <h2 id="dashboardTitle" style="font-size: 1.2rem; text-align: start; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">أحدث الملفات</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th id="thName">الاسم</th>
+                            <th id="thSize">الحجم</th>
+                            <th id="thDate">التاريخ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fileListBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="lang.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RET AI Command Center</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        /* Dashboard Specific Styles */
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 250px 1fr 300px;
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+            padding: 20px;
+            height: 95vh;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel h3 { margin-top: 0; font-size: 1.1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px; }
+        
+        /* Chat & Logs */
+        .scroll-area { flex: 1; overflow-y: auto; padding-right: 5px; font-family: monospace; font-size: 13px; }
+        .log-entry { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: #ccc; }
+        .log-entry.ai { color: #4ecca3; }
+        .log-entry.user { color: #a0a0a0; }
+        .log-entry.sys { color: #ffcc00; }
+
+        /* File Manager */
+        .file-list-item { cursor: pointer; padding: 5px; border-radius: 4px; color: #aaa; transition: 0.2s; }
+        .file-list-item:hover { background: rgba(255,255,255,0.1); color: white; }
+        #editor { width: 100%; height: 100%; background: rgba(0,0,0,0.3); border: none; color: #eee; font-family: monospace; padding: 10px; resize: none; }
+
+        /* Controls */
+        .control-group { margin-bottom: 15px; }
+        .btn-small { padding: 8px 12px; font-size: 12px; margin-top: 5px; width: auto; display: inline-block; }
+        input[type="text"] { background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar: Controls -->
+        <div class="panel">
+            <h3>⚡ System Controls</h3>
+            
+            <div class="control-group">
+                <label>AI Training</label>
+                <button onclick="startTraining()" id="btnTrain">Start Training Cycle</button>
+                <div class="progress-container" style="display:block; margin-top:10px;">
+                    <div id="trainProgress" class="progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Ingest Code (URL)</label>
+                <input type="text" id="urlInput" placeholder="https://raw.github...">
+                <button onclick="ingestUrl()" class="btn-small">Download & Learn</button>
+            </div>
+
+            <div class="control-group">
+                <label>System Health</label>
+                <div style="font-size: 12px; color: #aaa;">
+                    CPU: <span style="color:#4ecca3">Optimal</span><br>
+                    Memory: <span style="color:#4ecca3">Stable</span><br>
+                    AI Model: <span style="color:#4ecca3">Loaded</span>
+                </div>
+            </div>
+            
+            <div style="margin-top: auto;">
+                <a href="/" style="font-size: 12px;">&larr; Back to Website</a>
+            </div>
+        </div>
+
+        <!-- Center: File Editor & Chat -->
+        <div class="panel" style="grid-column: 2; grid-row: 1 / span 2;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="border:none; margin:0;">🛠️ Workspace</h3>
+                <div>
+                    <button onclick="toggleView('chat')" class="btn-small">Chat</button>
+                    <button onclick="toggleView('editor')" class="btn-small">Editor</button>
+                </div>
+            </div>
+
+            <!-- Chat View -->
+            <div id="view-chat" style="display: flex; flex-direction: column; height: 100%;">
+                <div id="chatDisplay" class="scroll-area" style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+                    <div class="log-entry sys">System: RET AI Engine v2.0 Online.</div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="chatInput" placeholder="Ask the AI about your code..." onkeypress="if(event.key==='Enter') sendChat()">
+                    <button onclick="sendChat()" style="width: 80px; margin:0;">Send</button>
+                </div>
+            </div>
+
+            <!-- Editor View -->
+            <div id="view-editor" style="display: none; flex-direction: column; height: 100%;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span id="currentFile" style="font-size: 12px; color: #aaa;">No file selected</span>
+                    <button onclick="saveFile()" class="btn-small" style="margin:0; background: #4ecca3; color: #000;">Save Changes</button>
+                </div>
+                <textarea id="editor"></textarea>
+            </div>
+        </div>
+
+        <!-- Right: File Browser & Logs -->
+        <div class="panel" style="grid-row: 1 / span 2;">
+            <h3>📂 Project Files</h3>
+            <div id="fileList" class="scroll-area" style="height: 40%; border-bottom: 1px solid var(--glass-border); margin-bottom: 10px;">
+                <!-- Files injected here -->
+            </div>
+
+            <h3>📜 Live Logs</h3>
+            <div id="liveLogs" class="scroll-area" style="font-size: 11px;">
+                <div class="log-entry">Waiting for events...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentFilePath = '';
+
+        // --- SocketIO Events ---
+        socket.on('connect', () => log('sys', 'Connected to Real-time Server'));
+        
+        socket.on('training_log', (data) => {
+            log('sys', data.log);
+            // Simulate progress bar movement
+            const bar = document.getElementById('trainProgress');
+            let w = parseInt(bar.style.width);
+            if(w < 90) bar.style.width = (w + 5) + '%';
+        });
+
+        socket.on('training_complete', () => {
+            document.getElementById('trainProgress').style.width = '100%';
+            document.getElementById('btnTrain').disabled = false;
+            document.getElementById('btnTrain').innerText = "Start Training Cycle";
+            log('sys', 'Training Complete.');
+        });
+
+        // --- Functions ---
+        function log(type, msg) {
+            const box = document.getElementById('liveLogs');
+            box.innerHTML += `<div class="log-entry ${type}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function toggleView(view) {
+            document.getElementById('view-chat').style.display = view === 'chat' ? 'flex' : 'none';
+            document.getElementById('view-editor').style.display = view === 'editor' ? 'flex' : 'none';
+        }
+
+        // Chat
+        async function sendChat() {
+            const input = document.getElementById('chatInput');
+            const text = input.value;
+            if(!text) return;
+            
+            const display = document.getElementById('chatDisplay');
+            display.innerHTML += `<div class="log-entry user">You: ${text}</div>`;
+            input.value = '';
+
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({prompt: text})
+            });
+            const data = await res.json();
+            display.innerHTML += `<div class="log-entry ai">AI: ${data.response}</div>`;
+            display.scrollTop = display.scrollHeight;
+        }
+
+        // Training
+        function startTraining() {
+            document.getElementById('btnTrain').disabled = true;
+            document.getElementById('btnTrain').innerText = "Training in Progress...";
+            document.getElementById('trainProgress').style.width = '0%';
+            socket.emit('start_training');
+        }
+
+        // Ingest
+        async function ingestUrl() {
+            const url = document.getElementById('urlInput').value;
+            if(!url) return;
+            log('sys', `Downloading: ${url}`);
+            
+            const res = await fetch('/api/ingest', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url: url})
+            });
+            const data = await res.json();
+            log('sys', data.message);
+            if(data.status === 'success') loadFileList();
+        }
+
+        // File Manager
+        async function loadFileList() {
+            const res = await fetch('/api/files');
+            const data = await res.json();
+            const list = document.getElementById('fileList');
+            list.innerHTML = '';
+            data.files.forEach(file => {
+                const div = document.createElement('div');
+                div.className = 'file-list-item';
+                div.innerText = file;
+                div.onclick = () => loadFile(file);
+                list.appendChild(div);
+            });
+        }
+
+        async function loadFile(path) {
+            currentFilePath = path;
+            document.getElementById('currentFile').innerText = path;
+            toggleView('editor');
+            
+            const res = await fetch('/api/files/content', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({path: path})
+            });
+            const data = await res.json();
+            document.getElementById('editor').value = data.content || "Error loading file";
+        }
+
+        async function saveFile() {
+            if(!currentFilePath) return;
+            const content = document.getElementById('editor').value;
+            
+            const res = await fetch('/api/files/content', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({path: currentFilePath, content: content, action: 'save'})
+            });
+            const data = await res.json();
+            if(data.status === 'saved') log('sys', `Saved ${currentFilePath}`);
+            else log('sys', 'Error saving file');
+        }
+
+        // Init
+        loadFileList();
+    </script>
+</body>
+</html>

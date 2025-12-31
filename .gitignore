@@ -1,0 +1,19 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log
+
+# Python cache and virtual env
+__pycache__/
+*.pyc
+venv/
+.env
+
+# AI Large Files (Models & Datasets are too big for standard GitHub)
+ai_engine/models/
+ai_engine/data/
+*.pt
+*.bin
+
+# System files
+.DS_Store
+Thumbs.db
