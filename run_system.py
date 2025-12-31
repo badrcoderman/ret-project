@@ -14,11 +14,14 @@ print("==================================================")
 
 # Import the Flask app from our new server file
 try:
+    # Try importing from the local server.py first (Recommended)
+    from server import app, socketio
+except ImportError:
     try:
         from ai_engine.server import app, socketio
     except ImportError:
-        # Fallback if server.py is in the root directory
-        from server import app, socketio
+        print("❌ Error: Could not find server.py in root or ai_engine/.")
+        raise
         
     # Run the server
     print("--- 🌐 RET System Server Running on http://localhost:5000 ---")
